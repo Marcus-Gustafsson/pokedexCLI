@@ -2,14 +2,32 @@ package main
 
 import (
 	"fmt" // Package for formatted I/O (input/output)
-	"os"  // Package for operating system functionalities, like exiting the program
+	"io"
+	"log"
+	"net/http"
+	"encoding/json"
+	"os" // Package for operating system functionalities, like exiting the program
 )
 
 // cliCommand represents a single command that can be run in our command-line interface (CLI).
 type cliCommand struct {
 	name        string
 	description string
-	callback    func() error // A function that takes no arguments and returns an error
+	callback    func(*config) error // A function that takes no arguments and returns an error
+}
+
+type locations struct {
+	Results  []struct {
+		Name string `json:"name"`
+		URL  string `json:"url"`
+	} `json:"results"`
+}
+
+
+type config struct {
+	Count    int    `json:"count"`
+	Next     string `json:"next"`
+	Previous *string `json:"previous"`
 }
 
 // commandsMap is a global registry of all supported CLI commands.
@@ -36,11 +54,16 @@ func init() {
 			description: "Exit the Pokedex",
 			callback:    commandExit, // Assigning the commandExit function as the callback
 		},
+		"map": {
+			name:        "map",
+			description: "Lists the locations",
+			callback:    commandMap, // Assigning the commandExit function as the callback
+		},
 	}
 }
 
 // commandExit handles the "exit" command.
-func commandExit() error {
+func commandExit(configPTR *config) error {
 	fmt.Println("Closing the Pokedex... Goodbye!")
 	os.Exit(0)
 	return nil // This line is technically unreachable due to os.Exit(0), but required by the function signature
@@ -49,7 +72,7 @@ func commandExit() error {
 // commandHelp handles the "help" command.
 // It prints a welcome message, then iterates through the 'commandsMap'
 // to dynamically display the name and description of each registered command.
-func commandHelp() error {
+func commandHelp(configPTR *config) error {
 	fmt.Println("Welcome to the Pokedex!")
 	fmt.Println("Usage:")
 	fmt.Println() // Prints an empty line for better formatting
@@ -58,4 +81,50 @@ func commandHelp() error {
 		fmt.Printf("%v: %v\n", cliCommand.name, cliCommand.description)
 	}
 	return nil // needed for the function signature
+}
+
+func commandMap(configPTR *config) error{
+
+	var url string
+
+	if configPTR.Next == "" {
+		url = "https://pokeapi.co/api/v2/location-area/"
+	}else{
+		url = configPTR.Next
+	}
+	res, err := http.Get(url)
+	if err != nil {
+		log.Fatal(err)
+	}
+	body, err := io.ReadAll(res.Body)
+
+	defer res.Body.Close()
+
+	if res.StatusCode > 299 {
+		log.Fatalf("Response failed with status code: %d and\nbody: %s\n", res.StatusCode, body)
+	}
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	locations := locations{}
+
+	err = json.Unmarshal(body, &locations)
+	if err != nil {
+	fmt.Println(err)
+	}
+
+	err = json.Unmarshal(body, configPTR)
+	if err != nil {
+	fmt.Println(err)
+	}
+
+	fmt.Printf("\nDBG: configPTR.NEXT = %v, configPTR.PREVIOUS = %v\n", configPTR.Next, configPTR.Previous)
+
+	for _, result := range locations.Results{
+		fmt.Printf("%v\n", result.Name)
+	}
+
+
+	return nil
 }

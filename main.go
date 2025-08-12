@@ -14,6 +14,8 @@ func main() {
 	
 	// Print the initial prompt
 	fmt.Print("Pokedex > ")
+
+	configPTR := config{}
 	
 	// Loop continues as long as there's input to scan (false when input ends (Ctrl+C or Ctrl+D))
 	for scanner.Scan() {
@@ -30,7 +32,7 @@ func main() {
 			command, exists := commandsMap[cleanedWords[0]]
 			if exists{
 				fmt.Printf("DBG: command: **%v** was found, running function...\n", cleanedWords[0])
-				err := command.callback()
+				err := command.callback(&configPTR)
 				if err != nil{
 					fmt.Printf("Error occured: %v \n", err)
 				}
