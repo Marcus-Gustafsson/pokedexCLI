@@ -1,11 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt" // Package for formatted I/O (input/output)
 	"io"
 	"log"
 	"net/http"
-	"encoding/json"
 	"os" // Package for operating system functionalities, like exiting the program
 )
 
@@ -17,16 +17,15 @@ type cliCommand struct {
 }
 
 type locations struct {
-	Results  []struct {
+	Results []struct {
 		Name string `json:"name"`
 		URL  string `json:"url"`
 	} `json:"results"`
 }
 
-
 type config struct {
-	Count    int    `json:"count"`
-	Next     string `json:"next"`
+	Count    int     `json:"count"`
+	Next     string  `json:"next"`
 	Previous *string `json:"previous"`
 }
 
@@ -52,12 +51,17 @@ func init() {
 		"exit": {
 			name:        "exit",
 			description: "Exit the Pokedex",
-			callback:    commandExit, // Assigning the commandExit function as the callback
+			callback:    commandExit,
 		},
 		"map": {
 			name:        "map",
 			description: "Lists the locations",
-			callback:    commandMap, // Assigning the commandExit function as the callback
+			callback:    commandMap,
+		},
+		"mapb": {
+			name:        "mapb",
+			description: "Lists the previous locations",
+			callback:    commandMapB,
 		},
 	}
 }
@@ -83,13 +87,13 @@ func commandHelp(configPTR *config) error {
 	return nil // needed for the function signature
 }
 
-func commandMap(configPTR *config) error{
+func commandMap(configPTR *config) error {
 
 	var url string
 
 	if configPTR.Next == "" {
 		url = "https://pokeapi.co/api/v2/location-area/"
-	}else{
+	} else {
 		url = configPTR.Next
 	}
 	res, err := http.Get(url)
@@ -111,20 +115,65 @@ func commandMap(configPTR *config) error{
 
 	err = json.Unmarshal(body, &locations)
 	if err != nil {
-	fmt.Println(err)
+		fmt.Println(err)
 	}
 
 	err = json.Unmarshal(body, configPTR)
 	if err != nil {
-	fmt.Println(err)
+		fmt.Println(err)
 	}
 
 	fmt.Printf("\nDBG: configPTR.NEXT = %v, configPTR.PREVIOUS = %v\n", configPTR.Next, configPTR.Previous)
 
-	for _, result := range locations.Results{
+	for _, result := range locations.Results {
 		fmt.Printf("%v\n", result.Name)
 	}
 
+	return nil
+}
+
+func commandMapB(configPTR *config) error {
+
+	var url string
+
+	if configPTR.Previous == nil {
+		fmt.Println("you're on the first page")
+		return nil
+	} else {
+		url = *configPTR.Previous
+	}
+	res, err := http.Get(url)
+	if err != nil {
+		log.Fatal(err)
+	}
+	body, err := io.ReadAll(res.Body)
+
+	defer res.Body.Close()
+
+	if res.StatusCode > 299 {
+		log.Fatalf("Response failed with status code: %d and\nbody: %s\n", res.StatusCode, body)
+	}
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	locations := locations{}
+
+	err = json.Unmarshal(body, &locations)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	err = json.Unmarshal(body, configPTR)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	fmt.Printf("\nDBG: configPTR.NEXT = %v, configPTR.PREVIOUS = %v\n", configPTR.Next, configPTR.Previous)
+
+	for _, result := range locations.Results {
+		fmt.Printf("%v\n", result.Name)
+	}
 
 	return nil
 }
