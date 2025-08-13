@@ -577,20 +577,16 @@ func catch(configPtr *config, cachePtr *internal.Cache, pokemonName string, poke
 
     // Message indicating which pokemon we are trying to catch
 	pokemonName = strings.ToLower(pokemonName)
-	fmt.Printf("Throwing a Pokeball at %v...\n", pokemonName)
+	color.New(color.Bold).Printf("Throwing a Pokéball at %v...\n", pokemonName)
 
 	
 	// Construct the API URL for the provided area name.
     url := fmt.Sprintf("https://pokeapi.co/api/v2/pokemon/%v/", pokemonName)
 
     // Try to get the response data from the cache first.
-	fmt.Println("DBG: Looking up URL (catch):", url)
     val, ok := cachePtr.Get(url)
 
-    if ok {
-        // Cached response found; skip the network call, saves time and bandwidth
-        fmt.Println("DBG: (from cache)")
-    } else {
+    if !ok {
         // Not in cache! Make HTTP request to fetch data from the API
         fmt.Println("DBG: (from API)")
         res, err := http.Get(url)
@@ -620,8 +616,6 @@ func catch(configPtr *config, cachePtr *internal.Cache, pokemonName string, poke
     if err != nil {
         return err
     }
-	fmt.Printf("DBG: Found pokemon %v...\n", pokemonName)
-	fmt.Printf("DBG: Base experience =  %v...\n", pokemon.BaseExperience)
 
 	chance := 1 - (float64(pokemon.BaseExperience) / float64(maxBaseExp))
 	if chance < 0 {
@@ -630,16 +624,13 @@ func catch(configPtr *config, cachePtr *internal.Cache, pokemonName string, poke
 	if chance > 1 {
 		chance = 0.99
 	}
-	fmt.Printf("DBG: Chance to catch pokemon =  %.2f...\n", chance)
 	randomFloat := rand.Float64()
-	fmt.Printf("DBG: randomFloat = %.2f\n", randomFloat)
-	fmt.Printf("DBG: chance <= randomFloat = %v\n", chance <= randomFloat)
 	if randomFloat < chance {
-    	fmt.Printf("%v was caught!\n", pokemonName)
-		fmt.Printf("You may now inspect it with the inspect command.\n")
 		pokedex[pokemonName] = pokemon
+		color.New(color.FgHiGreen, color.Bold).Printf("%v was caught!\n", pokemonName)
+        color.New(color.FgCyan).Println("You may now inspect it with the inspect command.")
 	} else {
-		fmt.Printf("Missed catch!\n")
+		color.New(color.FgHiRed, color.Bold).Println("Missed catch!")
 	}
 	fmt.Println()
 
@@ -651,38 +642,143 @@ func catch(configPtr *config, cachePtr *internal.Cache, pokemonName string, poke
 // inspect displays detailed information about a caught Pokémon.
 // If the user hasn't caught this Pokémon yet, prints a message.
 func inspect(configPtr *config, cachePtr *internal.Cache, pokemonName string, pokedex map[string]pokemonDetails) error {
+    foundPokemon, ok := pokedex[pokemonName]
+    if ok {
+        // Name header
+        color.New(color.FgHiYellow, color.Bold).Printf("Name: %v\n", foundPokemon.Name)
+        color.New(color.Bold).Printf("Height: %v\nWeight: %v\n", foundPokemon.Height, foundPokemon.Weight)
 
-	foundPokemon, ok := pokedex[pokemonName]
-	if ok{
-		fmt.Printf("Name: %v\n", foundPokemon.Name)
-		fmt.Printf(("Height: %v\nWeight: %v\n"), foundPokemon.Height, foundPokemon.Weight)
-		fmt.Printf("Stats:\n")
-		for _, value := range foundPokemon.Stats {
-			fmt.Printf("  - %v: %v\n", value.Stat.Name, value.BaseStat)
-		}
-		fmt.Printf("Types:\n")
-		for _, value := range foundPokemon.Types {
-			fmt.Printf("  - %v\n", value.Type.Name)
-		}
+        color.New(color.FgCyan, color.Bold).Println("Stats:")
+        for _, value := range foundPokemon.Stats {
+            statColor := color.New(color.Bold)
+            switch value.Stat.Name {
+            case "hp":
+                statColor.Add(color.FgHiGreen)
+            case "attack":
+                statColor.Add(color.FgHiRed)
+            case "defense":
+                statColor.Add(color.FgBlue)
+            case "special-attack":
+                statColor.Add(color.FgHiMagenta)
+            case "special-defense":
+                statColor.Add(color.FgHiCyan)
+            case "speed":
+                statColor.Add(color.FgHiWhite)
+            default:
+                statColor.Add(color.FgWhite)
+            }
+            statColor.Printf("  - %v: %v\n", value.Stat.Name, value.BaseStat)
+        }
 
-	}else{
-		fmt.Printf("You have not yet caught %v \n", pokemonName)
-	}
-
+        color.New(color.FgCyan, color.Bold).Println("Types:")
+        for _, value := range foundPokemon.Types {
+            typeName := value.Type.Name
+            typeColor := color.New(color.Bold)
+            switch typeName {
+            case "fire":
+                typeColor.Add(color.FgHiRed)
+            case "water":
+                typeColor.Add(color.FgHiCyan)
+            case "grass":
+                typeColor.Add(color.FgHiGreen)
+            case "electric":
+                typeColor.Add(color.FgHiYellow)
+            case "psychic":
+                typeColor.Add(color.FgMagenta)
+            case "bug":
+                typeColor.Add(color.FgGreen)
+            case "normal":
+                typeColor.Add(color.FgWhite)
+            case "fighting":
+                typeColor.Add(color.FgRed)
+            case "poison":
+                typeColor.Add(color.FgMagenta)
+            case "ground":
+                typeColor.Add(color.FgYellow)
+            case "flying":
+                typeColor.Add(color.FgHiBlue)
+            case "rock":
+                typeColor.Add(color.FgHiWhite)
+            case "ghost":
+                typeColor.Add(color.FgHiMagenta)
+            case "ice":
+                typeColor.Add(color.FgCyan)
+            case "dragon":
+                typeColor.Add(color.FgBlue)
+            case "dark":
+                typeColor.Add(color.FgBlack)
+            case "steel":
+                typeColor.Add(color.FgHiWhite)
+            case "fairy":
+                typeColor.Add(color.FgHiMagenta)
+            default:
+                typeColor.Add(color.FgCyan)
+            }
+            typeColor.Printf("  - %v\n", typeName)
+        }
+    } else {
+        color.New(color.FgHiRed, color.Bold).Printf("You have not yet caught %v\n", pokemonName)
+    }
     return nil
 }
 
 // pokedex lists all caught Pokémon names in the user's personal Pokedex.
 func pokedex(configPtr *config, cachePtr *internal.Cache, pokemonName string, pokedex map[string]pokemonDetails) error {
-
-	if len(pokedex) > 0{
-		fmt.Printf("Your Pokedex:\n")	
-		for key := range pokedex {
-			fmt.Printf(" - %v\n", key)	
-	}
-	}else{
-		fmt.Println("No pokemon in the Pokedex yet... Gotta catch 'em all!!")
-	}
+    if len(pokedex) > 0 {
+        color.New(color.FgCyan, color.Bold).Println("Your Pokedex:")
+        for key, details := range pokedex {
+            typeColor := color.New(color.Bold)
+            if len(details.Types) > 0 {
+                typeName := details.Types[0].Type.Name
+                switch typeName {
+                case "fire":
+                    typeColor.Add(color.FgHiRed)
+                case "water":
+                    typeColor.Add(color.FgHiCyan)
+                case "grass":
+                    typeColor.Add(color.FgHiGreen)
+                case "electric":
+                    typeColor.Add(color.FgHiYellow)
+                case "psychic":
+                    typeColor.Add(color.FgMagenta)
+                case "bug":
+                    typeColor.Add(color.FgGreen)
+                case "normal":
+                    typeColor.Add(color.FgWhite)
+                case "fighting":
+                    typeColor.Add(color.FgRed)
+                case "poison":
+                    typeColor.Add(color.FgMagenta)
+                case "ground":
+                    typeColor.Add(color.FgYellow)
+                case "flying":
+                    typeColor.Add(color.FgHiBlue)
+                case "rock":
+                    typeColor.Add(color.FgHiWhite)
+                case "ghost":
+                    typeColor.Add(color.FgHiMagenta)
+                case "ice":
+                    typeColor.Add(color.FgCyan)
+                case "dragon":
+                    typeColor.Add(color.FgBlue)
+                case "dark":
+                    typeColor.Add(color.FgHiBlack)
+                case "steel":
+                    typeColor.Add(color.FgHiWhite)
+                case "fairy":
+                    typeColor.Add(color.FgHiMagenta)
+                default:
+                    typeColor.Add(color.FgCyan)
+                }
+            } else {
+                typeColor.Add(color.FgHiGreen) // fallback for unknown type
+            }
+			color.New(color.Bold).Print("- ")
+            typeColor.Printf("%v\n", key)
+        }
+    } else {
+        color.New(color.FgHiMagenta, color.Bold).Println("No Pokémon in the Pokedex yet... Gotta catch 'em all!!")
+    }
     return nil
 }
 
