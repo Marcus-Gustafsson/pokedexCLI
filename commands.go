@@ -10,6 +10,7 @@ import (
 	"github.com/Marcus-Gustafsson/pokedexCLI/internal"
 	"math/rand"
 	"strings"
+	"github.com/fatih/color"
 )
 
 // cliCommand represents a command available in the CLI interface.
@@ -329,7 +330,7 @@ type pokemonDetails struct {
 	Weight int `json:"weight"`
 }
 
-const maxBaseExp = 350 // max base exp for calculating chance to capture pokemon!
+const maxBaseExp = 300 // max base exp for calculating chance to capture pokemon! (mew.base_experience = 270 exp, it was used as a threshold for the max base exp)
 
 
 // commandsMap maps command names to their cliCommand handler definitions.
@@ -342,60 +343,67 @@ func init() {
 	commandsMap = map[string]cliCommand{
 		"help": {
 			name:        "help",
-			description: "Displays a help message",
+			description: "Show all available commands with a brief description of each.",
 			callback:    commandHelp,
 		},
 		"exit": {
 			name:        "exit",
-			description: "Exit the Pokedex",
+			description: "Quit the Pokedex application immediately.",
 			callback:    commandExit,
 		},
 		"map": {
 			name:        "map",
-			description: "Lists the locations",
+			description: "List the next page of Pokémon location areas you can explore.",
 			callback:    commandMap,
 		},
 		"mapb": {
 			name:        "mapb",
-			description: "Lists the previous locations",
+			description: "List the previous page of Pokémon location areas.",
 			callback:    commandMapB,
 		},
 		"explore": {
 			name:        "explore",
-			description: "Explores given location",
+			description: "Show all Pokémon that can be encountered in a specified location area.",
 			callback:    explore,
 		},
 		"catch": {
 			name:        "catch",
-			description: "Tries to catch the given pokemon",
+			description: "Attempt to catch a Pokémon by name and add it to your Pokedex if successful.",
 			callback:    catch,
 		},
 		"inspect": {
 			name:        "inspect",
-			description: "Inspects the given pokemon in the Pokedex",
+			description: "View detailed stats and information about a Pokémon you have caught.",
 			callback:    inspect,
+		},
+		"pokedex": {
+			name:        "pokedex",
+			description: "Display a list of all Pokémon you have successfully caught.",
+			callback:    pokedex,
 		},
 	}
 }
 
-// commandExit exits the program immediately.
-// Required by the CLI to terminate gracefully.
+// commandExit terminates the CLI Pokedex application immediately.
+// It now prints the goodbye message in yellow for extra flair!
 func commandExit(configPtr *config, cachePtr *internal.Cache, location string, pokedex map[string]pokemonDetails) error {
-	fmt.Println("Closing the Pokedex... Goodbye!")
-	os.Exit(0)
-	return nil // This line is technically unreachable due to os.Exit(0), but required by the function signature
+    // Bright yellow bold goodbye for a positive, friendly signoff
+    color.New(color.FgHiYellow, color.Bold).Println("Closing the Pokedex... Goodbye!")
+    os.Exit(0)
+    return nil // Unreachable, but required
 }
 
 // commandHelp prints information about all available CLI commands.
 // It lists each command with its name and description.
 func commandHelp(configPtr *config, cachePtr *internal.Cache, location string, pokedex map[string]pokemonDetails) error {
-	fmt.Println("Welcome to the Pokedex!")
-	fmt.Println("Usage:")
-	fmt.Println()
-	for _, cliCommand := range commandsMap {
-		fmt.Printf("%v: %v\n", cliCommand.name, cliCommand.description)
-	}
-	return nil // needed for the function signature
+    color.New(color.FgCyan, color.Bold).Println("Welcome to the Pokedex!")
+    fmt.Println("Usage:\n")
+    for _, cliCommand := range commandsMap {
+        // Command name in bold yellow, description in white
+        color.New(color.FgHiYellow, color.Bold).Printf("%v: ", cliCommand.name)
+        color.White("%v\n", cliCommand.description)
+    }
+    return nil
 }
 
 // commandMap fetches and displays a paginated list of location areas from the PokeAPI.
@@ -411,14 +419,10 @@ func commandMap(configPtr *config, cachePtr *internal.Cache, location string, po
     }
 
     // Try to get the response data from the cache first.
-	fmt.Println("Looking up URL (map):", url)
     val, ok := cachePtr.Get(url)
-    if ok {
-        // Cached response found; skip the network call, saves time and bandwidth
-        fmt.Println("(from cache)")
-    } else {
+    if !ok {
         // Not in cache! Make HTTP request to fetch data from the API
-        fmt.Println("(from API)")
+        fmt.Println("DBG: (from API)")
         res, err := http.Get(url)
         if err != nil {
             return err
@@ -438,8 +442,7 @@ func commandMap(configPtr *config, cachePtr *internal.Cache, location string, po
 
         // Store the raw byte response in the cache for next time
         cachePtr.Add(url, val)
-    }
-    
+    }    
     var locations locations
     err := json.Unmarshal(val, &locations)
     if err != nil {
@@ -452,35 +455,30 @@ func commandMap(configPtr *config, cachePtr *internal.Cache, location string, po
     }
 
     // Print the names of all locations in the page
+    // Highlight each location name in green!
     for _, result := range locations.Results {
-        fmt.Printf("%v\n", result.Name)
+        color.New(color.FgHiGreen, color.Bold).Printf("%v\n", result.Name)
     }
 
     return nil
 }
 
-// commandMapB (map back) fetches and displays the previous 20 location areas from the PokeAPI.
-// If already at the first page, it informs the user.
+// commandMap shows the next page (or start) of Pokémon locations using the PokeAPI.
+// Results are cached for efficiency.
 func commandMapB(configPtr *config, cachePtr *internal.Cache, location string, pokedex map[string]pokemonDetails) error {
 
 	var url string
 
 	if configPtr.Previous == nil {
-		fmt.Println("you're on the first page")
+		color.New(color.FgHiBlack).Println("You're on the first page...")
 		return nil
 	} else {
 		url = *configPtr.Previous
 	}
 
-	// Try to get the response data from the cache first.
-	fmt.Println("Looking up URL (mapB):", url)
     val, ok := cachePtr.Get(url)
-    if ok {
-        // Cached response found; skip the network call, saves time and bandwidth
-        fmt.Println("(from cache)")
-    } else {
+    if !ok {
         // Not in cache! Make HTTP request to fetch data from the API
-        fmt.Println("(from API)")
         res, err := http.Get(url)
         if err != nil {
             return err
@@ -515,29 +513,23 @@ func commandMapB(configPtr *config, cachePtr *internal.Cache, location string, p
 	}
 
 	for _, result := range locations.Results {
-		fmt.Printf("%v\n", result.Name)
+		color.New(color.FgHiGreen, color.Bold).Printf("%v\n", result.Name)
 	}
 
 	return nil
 }
 
 
-// explore fetches and displays a list of Pokémon encountered in the given location area.
-// It uses an internal cache for fast repeated lookups. The area is specified by name.
+// commandMapB shows the previous page of Pokémon locations (or warns if on the first page) using the PokeAPI.
 func explore(configPtr *config, cachePtr *internal.Cache, areaName string, pokedex map[string]pokemonDetails) error {
     // Construct the API URL for the provided area name.
     url := fmt.Sprintf("https://pokeapi.co/api/v2/location-area/%v/", areaName)
 
 
     // Try to get the response data from the cache first.
-	fmt.Println("Looking up URL (explore):", url)
     val, ok := cachePtr.Get(url)
-    if ok {
-        // Cached response found; skip the network call, saves time and bandwidth
-        fmt.Println("(from cache)")
-    } else {
+    if !ok {
         // Not in cache! Make HTTP request to fetch data from the API
-        fmt.Println("(from API)")
         res, err := http.Get(url)
         if err != nil {
             return err
@@ -565,11 +557,13 @@ func explore(configPtr *config, cachePtr *internal.Cache, areaName string, poked
     if err != nil {
         return err
     }
-	fmt.Printf("Exploring %v...\n", areaName)
-	fmt.Println("Found Pokemon:")
-    // Print the names of all locations in the page
+	color.New(color.FgCyan, color.Bold).Printf(
+    "You venture into %s...\nThese wild Pokémon can be found here:\n",
+    areaName,
+	)
+    // Each wild Pokémon in magenta and bold
     for _, result := range areaDetails.PokemonEncounters {
-        fmt.Printf("\n- %v\n", result.Pokemon.Name)
+        color.New(color.FgHiMagenta, color.Bold).Printf(" - %v\n", result.Pokemon.Name)
     }
 	fmt.Println()
 
@@ -577,12 +571,8 @@ func explore(configPtr *config, cachePtr *internal.Cache, areaName string, poked
 }
 
 
-// catch attempts to catch a Pokemon by name.
-//
-// It fetches data from the PokeAPI (using cache when possible), calculates the chance
-// of catching the Pokemon based on its base experience and a fixed max value.
-// If the catch is successful, the Pokemon is added to the user's Pokedex.
-// Prints the catch attempt and outcome.
+// catch attempts to catch a Pokémon by name, using a probability based on base experience.
+// If caught, adds the Pokémon to the user's Pokedex.
 func catch(configPtr *config, cachePtr *internal.Cache, pokemonName string, pokedex map[string]pokemonDetails) error {
 
     // Message indicating which pokemon we are trying to catch
@@ -594,15 +584,15 @@ func catch(configPtr *config, cachePtr *internal.Cache, pokemonName string, poke
     url := fmt.Sprintf("https://pokeapi.co/api/v2/pokemon/%v/", pokemonName)
 
     // Try to get the response data from the cache first.
-	fmt.Println("Looking up URL (catch):", url)
+	fmt.Println("DBG: Looking up URL (catch):", url)
     val, ok := cachePtr.Get(url)
 
     if ok {
         // Cached response found; skip the network call, saves time and bandwidth
-        fmt.Println("(from cache)")
+        fmt.Println("DBG: (from cache)")
     } else {
         // Not in cache! Make HTTP request to fetch data from the API
-        fmt.Println("(from API)")
+        fmt.Println("DBG: (from API)")
         res, err := http.Get(url)
         if err != nil {
             return err
@@ -630,7 +620,7 @@ func catch(configPtr *config, cachePtr *internal.Cache, pokemonName string, poke
     if err != nil {
         return err
     }
-	fmt.Printf("Found pokemon %v...\n", pokemonName)
+	fmt.Printf("DBG: Found pokemon %v...\n", pokemonName)
 	fmt.Printf("DBG: Base experience =  %v...\n", pokemon.BaseExperience)
 
 	chance := 1 - (float64(pokemon.BaseExperience) / float64(maxBaseExp))
@@ -645,7 +635,8 @@ func catch(configPtr *config, cachePtr *internal.Cache, pokemonName string, poke
 	fmt.Printf("DBG: randomFloat = %.2f\n", randomFloat)
 	fmt.Printf("DBG: chance <= randomFloat = %v\n", chance <= randomFloat)
 	if randomFloat < chance {
-    	fmt.Printf("Pokemon caught!\n")
+    	fmt.Printf("%v was caught!\n", pokemonName)
+		fmt.Printf("You may now inspect it with the inspect command.\n")
 		pokedex[pokemonName] = pokemon
 	} else {
 		fmt.Printf("Missed catch!\n")
@@ -657,27 +648,41 @@ func catch(configPtr *config, cachePtr *internal.Cache, pokemonName string, poke
 
 
 
-// catch attempts to catch a Pokemon by name.
-//
-// It fetches data from the PokeAPI (using cache when possible), calculates the chance
-// of catching the Pokemon based on its base experience and a fixed max value.
-// If the catch is successful, the Pokemon is added to the user's Pokedex.
-// Prints the catch attempt and outcome.
+// inspect displays detailed information about a caught Pokémon.
+// If the user hasn't caught this Pokémon yet, prints a message.
 func inspect(configPtr *config, cachePtr *internal.Cache, pokemonName string, pokedex map[string]pokemonDetails) error {
 
 	foundPokemon, ok := pokedex[pokemonName]
-	//foundPokemon.Stats
-	// foundPokemon.Types
-
-
 	if ok{
 		fmt.Printf("Name: %v\n", foundPokemon.Name)
 		fmt.Printf(("Height: %v\nWeight: %v\n"), foundPokemon.Height, foundPokemon.Weight)
+		fmt.Printf("Stats:\n")
+		for _, value := range foundPokemon.Stats {
+			fmt.Printf("  - %v: %v\n", value.Stat.Name, value.BaseStat)
+		}
+		fmt.Printf("Types:\n")
+		for _, value := range foundPokemon.Types {
+			fmt.Printf("  - %v\n", value.Type.Name)
+		}
 
 	}else{
 		fmt.Printf("You have not yet caught %v \n", pokemonName)
 	}
 
+    return nil
+}
+
+// pokedex lists all caught Pokémon names in the user's personal Pokedex.
+func pokedex(configPtr *config, cachePtr *internal.Cache, pokemonName string, pokedex map[string]pokemonDetails) error {
+
+	if len(pokedex) > 0{
+		fmt.Printf("Your Pokedex:\n")	
+		for key := range pokedex {
+			fmt.Printf(" - %v\n", key)	
+	}
+	}else{
+		fmt.Println("No pokemon in the Pokedex yet... Gotta catch 'em all!!")
+	}
     return nil
 }
 

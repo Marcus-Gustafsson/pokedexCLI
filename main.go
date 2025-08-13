@@ -33,7 +33,7 @@ func main() {
 			command, exists := commandsMap[cleanedWords[0]]
 			if exists {
 				var err error
-				if (cleanedWords[0] == "explore" || cleanedWords[0] == "catch" || cleanedWords[0] == "inspect") && len(cleanedWords) > 1 {
+				if (cleanedWords[0] == "explore" || cleanedWords[0] == "catch" || cleanedWords[0] == "inspect"|| cleanedWords[0] == "pokedex") && len(cleanedWords) > 1 {
 					err = command.callback(&configPTR, cachePtr, cleanedWords[1], pokedex)
 				} else if cleanedWords[0] == "explore" || cleanedWords[0] == "catch" {
 					fmt.Println("Error: missing pokemon or location argument.")
