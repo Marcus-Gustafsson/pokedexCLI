@@ -27,7 +27,7 @@ Browse areas, explore wild Pokémon, catch and inspect them, and view your growi
 Make sure you have [Go](https://golang.org/doc/install) installed.
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/pokedexCLI.git
+git clone https://github.com/Marcus-Gustafsson/pokedexCLI
 cd pokedexCLI
 go run .
 ```
