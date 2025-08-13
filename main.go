@@ -1,54 +1,51 @@
+// main.go
 package main
 
 import (
 	"bufio"
 	"fmt"
 	"os"
+	"time"
+
+	"github.com/Marcus-Gustafsson/pokedexCLI/internal"
 )
 
-// main function starts the Pokedex REPL (Read-Eval-Print Loop)
+// main starts the Pokedex REPL (Read-Eval-Print Loop).
+// It displays a prompt, reads user commands, and dispatches them to the proper handler.
+// The loop continues until standard input ends or the user issues an exit command.
 func main() {
-
-	// Create a new scanner to read from standard input (keyboard)
 	scanner := bufio.NewScanner(os.Stdin)
-	
-	// Print the initial prompt
 	fmt.Print("Pokedex > ")
 
+	// configPTR keeps track of paging state for the PokeAPI.
 	configPTR := config{}
-	
-	// Loop continues as long as there's input to scan (false when input ends (Ctrl+C or Ctrl+D))
+
+	// Init new cache with given interval (interval determines when cacheEntries are cleared)
+	cachePtr := internal.NewCache(30 * time.Second)
+
+	// The REPL loop: waits for user input, dispatches commands, then re-prompts.
 	for scanner.Scan() {
-		// Get the user's input text
 		userInput := scanner.Text()
-		
-		// Clean and parse the input into words
 		cleanedWords := cleanInput(userInput)
-		
-		// Check if we have at least one word (command)
+
 		if len(cleanedWords) > 0 {
-			// Print the first word as the command
-			fmt.Printf("DBG: Your command was: %v \n", cleanedWords[0])
 			command, exists := commandsMap[cleanedWords[0]]
-			if exists{
-				fmt.Printf("DBG: command: **%v** was found, running function...\n", cleanedWords[0])
-				err := command.callback(&configPTR)
-				if err != nil{
-					fmt.Printf("Error occured: %v \n", err)
+			if exists {
+				// Run the matched command's callback.
+				err := command.callback(&configPTR, cachePtr)
+				if err != nil {
+					fmt.Printf("Error occurred: %v\n", err)
 				}
-			}else{
+			} else {
 				fmt.Println("Unknown command")
 			}
-			
 		}
 
-		// Print the prompt again for the next command
 		fmt.Print("Pokedex > ")
 	}
-	
-	// Handle any scanning errors
+
+	// Detect and report any error that happened during input scanning.
 	if err := scanner.Err(); err != nil {
 		fmt.Fprintln(os.Stderr, "reading standard input:", err)
 	}
-
 }

@@ -6,47 +6,44 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os" // Package for operating system functionalities, like exiting the program
+	"os" // Package for operating system functionalities, like exiting the program¨
+	"github.com/Marcus-Gustafsson/pokedexCLI/internal"
 )
 
-// cliCommand represents a single command that can be run in our command-line interface (CLI).
+// cliCommand represents a command available in the CLI interface.
 type cliCommand struct {
-	name        string
-	description string
-	callback    func(*config) error // A function that takes no arguments and returns an error
+	name        string              // The name of the command (e.g., "help")
+	description string              // A short description of this command
+	callback    func(*config, *internal.Cache) error // The function executed when this command is invoked
 }
 
+// locations holds the results from the PokeAPI location-area endpoint.
 type locations struct {
 	Results []struct {
-		Name string `json:"name"`
-		URL  string `json:"url"`
+		Name string `json:"name"` // Name of the location area
+		URL  string `json:"url"`  // API URL for details about this location area
 	} `json:"results"`
 }
 
+// config stores pagination URLs and result count for navigating paginated PokeAPI responses.
 type config struct {
 	Count    int     `json:"count"`
-	Next     string  `json:"next"`
-	Previous *string `json:"previous"`
+	Next     string  `json:"next"`     // URL for the next set of results, or "" if none
+	Previous *string `json:"previous"` // URL for the previous set, or nil if on the first page
 }
 
-// commandsMap is a global registry of all supported CLI commands.
-// It maps the command name (a string) to its corresponding cliCommand struct.
-// Its initialization (populating it with actual commands) happens in the init() function.
+// commandsMap maps command names to their cliCommand handler definitions.
+// It is initialized in the init() function to resolve dependency cycles.
 var commandsMap map[string]cliCommand
 
-// init() is a special Go function that runs automatically before the main() function.
-// We use it here to initialize our 'commandsMap'. This is crucial for solving
-// the "initialization cycle" problem. If we tried to initialize commandsMap directly
-// with 'commandHelp' (which itself refers to commandsMap to print all commands),
-// Go would detect a circular dependency during compilation.
-// By populating the map in init(), both commandExit and commandHelp functions
-// are fully defined and ready to be referenced by the map, resolving the cycle.
+// init initializes the commandsMap with all supported commands.
+// This resolves the initialization cycle between commandsMap and handler definitions.
 func init() {
 	commandsMap = map[string]cliCommand{
 		"help": {
 			name:        "help",
 			description: "Displays a help message",
-			callback:    commandHelp, // Assigning the commandHelp function as the callback
+			callback:    commandHelp,
 		},
 		"exit": {
 			name:        "exit",
@@ -66,110 +63,141 @@ func init() {
 	}
 }
 
-// commandExit handles the "exit" command.
-func commandExit(configPTR *config) error {
+// commandExit exits the program immediately.
+// Required by the CLI to terminate gracefully.
+func commandExit(configPtr *config, cachePtr *internal.Cache) error {
 	fmt.Println("Closing the Pokedex... Goodbye!")
 	os.Exit(0)
 	return nil // This line is technically unreachable due to os.Exit(0), but required by the function signature
 }
 
-// commandHelp handles the "help" command.
-// It prints a welcome message, then iterates through the 'commandsMap'
-// to dynamically display the name and description of each registered command.
-func commandHelp(configPTR *config) error {
+// commandHelp prints information about all available CLI commands.
+// It lists each command with its name and description.
+func commandHelp(configPtr *config, cachePtr *internal.Cache) error {
 	fmt.Println("Welcome to the Pokedex!")
 	fmt.Println("Usage:")
-	fmt.Println() // Prints an empty line for better formatting
+	fmt.Println()
 	for _, cliCommand := range commandsMap {
-		// Prints each command's name and description in the format "name: description"
 		fmt.Printf("%v: %v\n", cliCommand.name, cliCommand.description)
 	}
 	return nil // needed for the function signature
 }
 
-func commandMap(configPTR *config) error {
+// commandMap fetches and displays a paginated list of location areas from the PokeAPI.
+// It uses a cache to avoid unnecessary HTTP requests for previously seen pages.
+func commandMap(configPtr *config, cachePtr *internal.Cache) error {
+    var url string
 
-	var url string
+    // Determine which URL to fetch: next page or default start page
+    if configPtr.Next == "" {
+        url = "https://pokeapi.co/api/v2/location-area/?offset=0&limit=20"
+    } else {
+        url = configPtr.Next
+    }
 
-	if configPTR.Next == "" {
-		url = "https://pokeapi.co/api/v2/location-area/"
-	} else {
-		url = configPTR.Next
-	}
-	res, err := http.Get(url)
-	if err != nil {
-		log.Fatal(err)
-	}
-	body, err := io.ReadAll(res.Body)
+    // Try to get the response data from the cache first.
+	fmt.Println("Looking up URL:", url)
+    val, ok := cachePtr.Get(url)
+    if ok {
+        // Cached response found; skip the network call, saves time and bandwidth
+        fmt.Println("(from cache)")
+    } else {
+        // Not in cache! Make HTTP request to fetch data from the API
+        fmt.Println("(from API)")
+        res, err := http.Get(url)
+        if err != nil {
+            return err
+        }
 
-	defer res.Body.Close()
+        defer res.Body.Close() // Always close response body when done
 
-	if res.StatusCode > 299 {
-		log.Fatalf("Response failed with status code: %d and\nbody: %s\n", res.StatusCode, body)
-	}
-	if err != nil {
-		log.Fatal(err)
-	}
+        val, err = io.ReadAll(res.Body)
+        if err != nil {
+            return err
+        }
 
-	locations := locations{}
+        if res.StatusCode > 299 {
+            // Log if response is an error
+            log.Fatalf("Response failed with status code: %d and\nbody: %s\n", res.StatusCode, val)
+        }
 
-	err = json.Unmarshal(body, &locations)
-	if err != nil {
-		fmt.Println(err)
-	}
+        // Store the raw byte response in the cache for next time
+        cachePtr.Add(url, val)
+    }
+    
+    var locations locations
+    err := json.Unmarshal(val, &locations)
+    if err != nil {
+        return err
+    }
 
-	err = json.Unmarshal(body, configPTR)
-	if err != nil {
-		fmt.Println(err)
-	}
+    err = json.Unmarshal(val, configPtr)
+    if err != nil {
+        return err
+    }
 
-	fmt.Printf("\nDBG: configPTR.NEXT = %v, configPTR.PREVIOUS = %v\n", configPTR.Next, configPTR.Previous)
+    // Print the names of all locations in the page
+    for _, result := range locations.Results {
+        fmt.Printf("%v\n", result.Name)
+    }
 
-	for _, result := range locations.Results {
-		fmt.Printf("%v\n", result.Name)
-	}
-
-	return nil
+    return nil
 }
 
-func commandMapB(configPTR *config) error {
+// commandMapB (map back) fetches and displays the previous 20 location areas from the PokeAPI.
+// If already at the first page, it informs the user.
+func commandMapB(configPtr *config, cachePtr *internal.Cache) error {
 
 	var url string
 
-	if configPTR.Previous == nil {
+	if configPtr.Previous == nil {
 		fmt.Println("you're on the first page")
 		return nil
 	} else {
-		url = *configPTR.Previous
+		url = *configPtr.Previous
 	}
-	res, err := http.Get(url)
-	if err != nil {
-		log.Fatal(err)
-	}
-	body, err := io.ReadAll(res.Body)
 
-	defer res.Body.Close()
+	// Try to get the response data from the cache first.
+	fmt.Println("Looking up URL:", url)
+    val, ok := cachePtr.Get(url)
+    if ok {
+        // Cached response found; skip the network call, saves time and bandwidth
+        fmt.Println("(from cache)")
+    } else {
+        // Not in cache! Make HTTP request to fetch data from the API
+        fmt.Println("(from API)")
+        res, err := http.Get(url)
+        if err != nil {
+            return err
+        }
 
-	if res.StatusCode > 299 {
-		log.Fatalf("Response failed with status code: %d and\nbody: %s\n", res.StatusCode, body)
-	}
-	if err != nil {
-		log.Fatal(err)
-	}
+        defer res.Body.Close() // Always close response body when done
+
+        val, err = io.ReadAll(res.Body)
+        if err != nil {
+            return err
+        }
+
+        if res.StatusCode > 299 {
+            // Log if response is an error
+            log.Fatalf("Response failed with status code: %d and\nbody: %s\n", res.StatusCode, val)
+        }
+
+        // Store the raw byte response in the cache for next time
+        cachePtr.Add(url, val)
+    }
 
 	locations := locations{}
 
-	err = json.Unmarshal(body, &locations)
+	err := json.Unmarshal(val, &locations)
 	if err != nil {
-		fmt.Println(err)
+		return err
 	}
 
-	err = json.Unmarshal(body, configPTR)
+	err = json.Unmarshal(val, configPtr)
 	if err != nil {
-		fmt.Println(err)
+		return err
 	}
-
-	fmt.Printf("\nDBG: configPTR.NEXT = %v, configPTR.PREVIOUS = %v\n", configPTR.Next, configPTR.Previous)
 
 	for _, result := range locations.Results {
 		fmt.Printf("%v\n", result.Name)
