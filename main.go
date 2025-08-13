@@ -19,6 +19,7 @@ func main() {
 
 	// configPTR keeps track of paging state for the PokeAPI.
 	configPTR := config{}
+	pokedex := make(map[string]pokemonDetails)
 
 	// Init new cache with given interval (interval determines when cacheEntries are cleared)
 	cachePtr := internal.NewCache(30 * time.Second)
@@ -32,12 +33,12 @@ func main() {
 			command, exists := commandsMap[cleanedWords[0]]
 			if exists {
 				var err error
-				if cleanedWords[0] == "explore"{
-					// Run the explore with location command's callback.
-					err = command.callback(&configPTR, cachePtr, cleanedWords[1])
-				}else{
-					// Run the matched command's callback.
-					err = command.callback(&configPTR, cachePtr, "")
+				if (cleanedWords[0] == "explore" || cleanedWords[0] == "catch" || cleanedWords[0] == "inspect") && len(cleanedWords) > 1 {
+					err = command.callback(&configPTR, cachePtr, cleanedWords[1], pokedex)
+				} else if cleanedWords[0] == "explore" || cleanedWords[0] == "catch" {
+					fmt.Println("Error: missing pokemon or location argument.")
+				} else {
+					err = command.callback(&configPTR, cachePtr, "", pokedex)
 				}
 
 				if err != nil {
