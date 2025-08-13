@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 	"time"
-
+	"github.com/fatih/color"
 	"github.com/Marcus-Gustafsson/pokedexCLI/internal"
 )
 
@@ -15,7 +15,7 @@ import (
 // The loop continues until standard input ends or the user issues an exit command.
 func main() {
 	scanner := bufio.NewScanner(os.Stdin)
-	fmt.Print("Pokedex > ")
+	color.New(color.FgCyan, color.Bold).Print("Pokedex > ")
 
 	// configPTR keeps track of paging state for the PokeAPI.
 	configPTR := config{}
@@ -36,7 +36,7 @@ func main() {
 				if (cleanedWords[0] == "explore" || cleanedWords[0] == "catch" || cleanedWords[0] == "inspect"|| cleanedWords[0] == "pokedex") && len(cleanedWords) > 1 {
 					err = command.callback(&configPTR, cachePtr, cleanedWords[1], pokedex)
 				} else if cleanedWords[0] == "explore" || cleanedWords[0] == "catch" {
-					fmt.Println("Error: missing pokemon or location argument.")
+					color.New(color.FgHiRed, color.Bold).Println("Error: missing pokemon or location argument.")
 				} else {
 					err = command.callback(&configPTR, cachePtr, "", pokedex)
 				}
@@ -49,7 +49,7 @@ func main() {
 			}
 		}
 
-		fmt.Print("Pokedex > ")
+		color.New(color.FgCyan, color.Bold).Print("Pokedex > ")
 	}
 
 	// Detect and report any error that happened during input scanning.

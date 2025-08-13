@@ -397,7 +397,8 @@ func commandExit(configPtr *config, cachePtr *internal.Cache, location string, p
 // It lists each command with its name and description.
 func commandHelp(configPtr *config, cachePtr *internal.Cache, location string, pokedex map[string]pokemonDetails) error {
     color.New(color.FgCyan, color.Bold).Println("Welcome to the Pokedex!")
-    fmt.Println("Usage:\n")
+    fmt.Println("Usage:")
+	fmt.Println()
     for _, cliCommand := range commandsMap {
         // Command name in bold yellow, description in white
         color.New(color.FgHiYellow, color.Bold).Printf("%v: ", cliCommand.name)
