@@ -423,7 +423,6 @@ func commandMap(configPtr *config, cachePtr *internal.Cache, location string, po
     val, ok := cachePtr.Get(url)
     if !ok {
         // Not in cache! Make HTTP request to fetch data from the API
-        fmt.Println("DBG: (from API)")
         res, err := http.Get(url)
         if err != nil {
             return err
@@ -589,7 +588,6 @@ func catch(configPtr *config, cachePtr *internal.Cache, pokemonName string, poke
 
     if !ok {
         // Not in cache! Make HTTP request to fetch data from the API
-        fmt.Println("DBG: (from API)")
         res, err := http.Get(url)
         if err != nil {
             return err
