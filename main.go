@@ -31,8 +31,15 @@ func main() {
 		if len(cleanedWords) > 0 {
 			command, exists := commandsMap[cleanedWords[0]]
 			if exists {
-				// Run the matched command's callback.
-				err := command.callback(&configPTR, cachePtr)
+				var err error
+				if cleanedWords[0] == "explore"{
+					// Run the explore with location command's callback.
+					err = command.callback(&configPTR, cachePtr, cleanedWords[1])
+				}else{
+					// Run the matched command's callback.
+					err = command.callback(&configPTR, cachePtr, "")
+				}
+
 				if err != nil {
 					fmt.Printf("Error occurred: %v\n", err)
 				}

@@ -14,7 +14,7 @@ import (
 type cliCommand struct {
 	name        string              // The name of the command (e.g., "help")
 	description string              // A short description of this command
-	callback    func(*config, *internal.Cache) error // The function executed when this command is invoked
+	callback    func(*config, *internal.Cache, string) error // The function executed when this command is invoked
 }
 
 // locations holds the results from the PokeAPI location-area endpoint.
@@ -30,6 +30,19 @@ type config struct {
 	Count    int     `json:"count"`
 	Next     string  `json:"next"`     // URL for the next set of results, or "" if none
 	Previous *string `json:"previous"` // URL for the previous set, or nil if on the first page
+}
+
+type locationAreaDetails struct {
+	Location  struct {
+		Name string `json:"name"`
+		URL  string `json:"url"`
+	} `json:"location"`
+	PokemonEncounters []struct {
+		Pokemon struct {
+			Name string `json:"name"`
+			URL  string `json:"url"`
+		} `json:"pokemon"`
+	} `json:"pokemon_encounters"`
 }
 
 // commandsMap maps command names to their cliCommand handler definitions.
@@ -60,12 +73,17 @@ func init() {
 			description: "Lists the previous locations",
 			callback:    commandMapB,
 		},
+		"explore": {
+			name:        "explore",
+			description: "Explores given location",
+			callback:    explore,
+		},
 	}
 }
 
 // commandExit exits the program immediately.
 // Required by the CLI to terminate gracefully.
-func commandExit(configPtr *config, cachePtr *internal.Cache) error {
+func commandExit(configPtr *config, cachePtr *internal.Cache, location string) error {
 	fmt.Println("Closing the Pokedex... Goodbye!")
 	os.Exit(0)
 	return nil // This line is technically unreachable due to os.Exit(0), but required by the function signature
@@ -73,7 +91,7 @@ func commandExit(configPtr *config, cachePtr *internal.Cache) error {
 
 // commandHelp prints information about all available CLI commands.
 // It lists each command with its name and description.
-func commandHelp(configPtr *config, cachePtr *internal.Cache) error {
+func commandHelp(configPtr *config, cachePtr *internal.Cache, location string) error {
 	fmt.Println("Welcome to the Pokedex!")
 	fmt.Println("Usage:")
 	fmt.Println()
@@ -85,7 +103,7 @@ func commandHelp(configPtr *config, cachePtr *internal.Cache) error {
 
 // commandMap fetches and displays a paginated list of location areas from the PokeAPI.
 // It uses a cache to avoid unnecessary HTTP requests for previously seen pages.
-func commandMap(configPtr *config, cachePtr *internal.Cache) error {
+func commandMap(configPtr *config, cachePtr *internal.Cache, location string) error {
     var url string
 
     // Determine which URL to fetch: next page or default start page
@@ -96,7 +114,7 @@ func commandMap(configPtr *config, cachePtr *internal.Cache) error {
     }
 
     // Try to get the response data from the cache first.
-	fmt.Println("Looking up URL:", url)
+	fmt.Println("Looking up URL (map):", url)
     val, ok := cachePtr.Get(url)
     if ok {
         // Cached response found; skip the network call, saves time and bandwidth
@@ -146,7 +164,7 @@ func commandMap(configPtr *config, cachePtr *internal.Cache) error {
 
 // commandMapB (map back) fetches and displays the previous 20 location areas from the PokeAPI.
 // If already at the first page, it informs the user.
-func commandMapB(configPtr *config, cachePtr *internal.Cache) error {
+func commandMapB(configPtr *config, cachePtr *internal.Cache, location string) error {
 
 	var url string
 
@@ -158,7 +176,7 @@ func commandMapB(configPtr *config, cachePtr *internal.Cache) error {
 	}
 
 	// Try to get the response data from the cache first.
-	fmt.Println("Looking up URL:", url)
+	fmt.Println("Looking up URL (mapB):", url)
     val, ok := cachePtr.Get(url)
     if ok {
         // Cached response found; skip the network call, saves time and bandwidth
@@ -205,3 +223,59 @@ func commandMapB(configPtr *config, cachePtr *internal.Cache) error {
 
 	return nil
 }
+
+
+// explore fetches and displays a list of Pokémon encountered in the given location area.
+// It uses an internal cache for fast repeated lookups. The area is specified by name.
+func explore(configPtr *config, cachePtr *internal.Cache, areaName string) error {
+    // Construct the API URL for the provided area name.
+    url := fmt.Sprintf("https://pokeapi.co/api/v2/location-area/%v/", areaName)
+
+
+    // Try to get the response data from the cache first.
+	fmt.Println("Looking up URL (explore):", url)
+    val, ok := cachePtr.Get(url)
+    if ok {
+        // Cached response found; skip the network call, saves time and bandwidth
+        fmt.Println("(from cache)")
+    } else {
+        // Not in cache! Make HTTP request to fetch data from the API
+        fmt.Println("(from API)")
+        res, err := http.Get(url)
+        if err != nil {
+            return err
+        }
+
+        defer res.Body.Close() // Always close response body when done
+
+        val, err = io.ReadAll(res.Body)
+        if err != nil {
+            return err
+        }
+
+        if res.StatusCode > 299 {
+            // Log if response is an error
+            log.Fatalf("Response failed with status code: %d and\nbody: %s\n", res.StatusCode, val)
+        }
+
+        // Store the raw byte response in the cache for next time
+        cachePtr.Add(url, val)
+    }
+    
+	// Unmarshal HTTP response to extract Pokémon encounters from the JSON
+    var areaDetails locationAreaDetails
+    err := json.Unmarshal(val, &areaDetails)
+    if err != nil {
+        return err
+    }
+	fmt.Printf("Exploring %v...\n", areaName)
+	fmt.Println("Found Pokemon:")
+    // Print the names of all locations in the page
+    for _, result := range areaDetails.PokemonEncounters {
+        fmt.Printf("\n- %v\n", result.Pokemon.Name)
+    }
+	fmt.Println()
+
+    return nil
+}
+
